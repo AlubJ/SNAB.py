@@ -182,3 +182,5 @@ cython_debug/
 
 # SNAB example files
 *.snab
+
+.DS_Store

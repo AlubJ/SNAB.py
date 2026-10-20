@@ -1,4 +1,4 @@
-import struct, zlib
+import struct, zlib, uuid
 from .exceptions import *
 from .constants import *
 from .registry import GLOBAL_REGISTRY
@@ -66,6 +66,8 @@ class Writer:
             return ARRAY
         if isinstance(v, (bytes, bytearray)):
             return BUFFER
+        if isinstance(v, uuid):
+            return GUID
 
         for t, enc in GLOBAL_REGISTRY._encoders.items():
             if enc.can_encode(v):
@@ -93,6 +95,13 @@ class Writer:
         elif isinstance(v, (bytes, bytearray)):
             self.buf.extend(struct.pack(self.endian + "I", len(v)))
             self.buf.extend(v)
+
+        elif isinstance(v, uuid):
+            match self.endian:
+                case "<":
+                    self.buf.extend(v.bytes_le)
+                case ">":
+                    self.buf.extend(v.bytes)
 
         elif isinstance(v, dict):
             for k, val in v.items():
