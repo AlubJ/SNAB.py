@@ -14,12 +14,13 @@ class Writer:
             self.flags |= 0x01
 
     def write(self, obj):
-        if isinstance(obj, dict):
-            self._struct(obj)
-        elif isinstance(obj, list):
-            self._array(obj)
-        else:
-            raise ValueError("Root must be dict or list")
+        match obj:
+            case dict():
+                self._struct(obj)
+            case list() | tuple():
+                self._array(obj)
+            case _:
+                raise ValueError("Root must be dict or list")
 
         data = bytes(self.buf)
         if self.compress:
@@ -31,11 +32,11 @@ class Writer:
         return header + data
 
     def _struct(self, d):
-        self.buf.append(STRUCT)
+        self.buf.append(SNABType.STRUCT)
         self._encode(d)
 
     def _array(self, a):
-        self.buf.append(ARRAY)
+        self.buf.append(SNABType.ARRAY)
         self._encode(a)
 
     def _value(self, v, key=None):
@@ -48,26 +49,27 @@ class Writer:
         self._encode(v)
 
     def _type(self, v):
-        if v is None:
-            return NULL
-        if v is True:
-            return TRUE
-        if v is False:
-            return FALSE
-        if isinstance(v, str):
-            return STRING
-        if isinstance(v, float):
-            return REAL
-        if isinstance(v, int):
-            return INT64
-        if isinstance(v, dict):
-            return STRUCT
-        if isinstance(v, (list, tuple)):
-            return ARRAY
-        if isinstance(v, (bytes, bytearray)):
-            return BUFFER
-        if isinstance(v, uuid):
-            return GUID
+        match v:
+            case None:
+                return SNABType.NULL
+            case True:
+                return SNABType.TRUE
+            case False:
+                return SNABType.FALSE
+            case str():
+                return SNABType.STRING
+            case float():
+                return SNABType.REAL
+            case int():
+                return SNABType.INT64
+            case dict():
+                return SNABType.STRUCT
+            case list() | tuple():
+                return SNABType.ARRAY
+            case bytes() | bytearray():
+                return SNABType.BUFFER
+            case uuid.UUID():
+                return SNABType.GUID
 
         for t, enc in GLOBAL_REGISTRY._encoders.items():
             if enc.can_encode(v):
@@ -77,53 +79,50 @@ class Writer:
         raise ValueError(f"Unsupported type: {type(v)}")
 
     def _encode(self, v):
-        if v is None:
-            return
-
-        if v is False or v is True:
-            return
+        match v:
+            case None | True | False:
+                return
+            case str():
+                self.buf.extend(v.encode("utf-8") + b"\x00")
+                return
+            case float():
+                self.buf.extend(struct.pack(self.endian + "d", v))
+                return
+            case int():
+                self.buf.extend(struct.pack(self.endian + "q", v))
+                return
+            case bytes() | bytearray():
+                self.buf.extend(struct.pack(self.endian + "I", len(v)))
+                self.buf.extend(v)
+                return
+            case uuid.UUID():
+                match self.endian:
+                    case "<":
+                        self.buf.extend(v.bytes_le)
+                    case ">":
+                        self.buf.extend(v.bytes)
+                return
+            case dict():
+                for k, val in v.items():
+                    dtype = self._type(val)
+                    self.buf.append(dtype)
+                    self.buf.extend(k.encode("utf-8") + b"\x00")
+                    self._encode(val)
+                self.buf.append(SNABType.TERMINATOR)
+                return
+            case list() | tuple():
+                for val in v:
+                    dtype = self._type(val)
+                    self.buf.append(dtype)
+                    self._encode(val)
+                self.buf.append(SNABType.TERMINATOR)
+                return
             
-        if isinstance(v, str):
-            self.buf.extend(v.encode("utf-8") + b"\x00")
+        for t, enc in GLOBAL_REGISTRY._encoders.items():
+            if enc.can_encode(v):
+                self.flags |= 0x02
+                self.flags |= 0x04
+                enc.encode(self, v)
+                return
 
-        elif isinstance(v, float):
-            self.buf.extend(struct.pack(self.endian + "d", v))
-
-        elif isinstance(v, int):
-            self.buf.extend(struct.pack(self.endian + "q", v))
-
-        elif isinstance(v, (bytes, bytearray)):
-            self.buf.extend(struct.pack(self.endian + "I", len(v)))
-            self.buf.extend(v)
-
-        elif isinstance(v, uuid):
-            match self.endian:
-                case "<":
-                    self.buf.extend(v.bytes_le)
-                case ">":
-                    self.buf.extend(v.bytes)
-
-        elif isinstance(v, dict):
-            for k, val in v.items():
-                dtype = self._type(val)
-                self.buf.append(dtype)
-                self.buf.extend(k.encode("utf-8") + b"\x00")
-                self._encode(val)
-            self.buf.append(TERMINATOR)
-
-        elif isinstance(v, (list, tuple)):
-            for val in v:
-                dtype = self._type(val)
-                self.buf.append(dtype)
-                self._encode(val)
-            self.buf.append(TERMINATOR)
-
-        else:
-            for t, enc in GLOBAL_REGISTRY._encoders.items():
-                if enc.can_encode(v):
-                    self.flags |= 0x02
-                    self.flags |= 0x04
-                    enc.encode(self, v)
-                    return
-
-            raise ValueError(f"Unsupported type: {type(v)}")
+        raise ValueError(f"Unsupported type: {type(v)}")
