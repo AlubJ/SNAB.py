@@ -1,8 +1,9 @@
-import struct, zlib
+import struct, zlib, uuid
 from .constants import *
 from .exceptions import *
 from .registry import GLOBAL_REGISTRY
 from .header import read_header
+
 
 class Reader:
     def __init__(self, data, validate=True, max_depth=1024):
@@ -10,7 +11,7 @@ class Reader:
         self.max_depth = max_depth
 
         self.header = read_header(data)
-        self.data = data[HEADER_SIZE:HEADER_SIZE+self.header["size"]]
+        self.data = data[HEADER_SIZE : HEADER_SIZE + self.header["size"]]
 
         if validate:
             if zlib.crc32(self.data) != self.header["checksum"]:
@@ -24,10 +25,12 @@ class Reader:
 
     def read(self):
         dtype = self._u8()
-        if dtype == STRUCT:
-            return self._read_struct(0)
-        if dtype == ARRAY:
-            return self._read_array(0)
+        match dtype:
+            case SNABType.STRUCT:
+                return self._read_struct(0)
+            case SNABType.ARRAY:
+                return self._read_array(0)
+
         raise SNABFormatError("Root must be struct or array")
 
     def _read_struct(self, depth):
@@ -37,7 +40,7 @@ class Reader:
         result = {}
         while True:
             dtype = self._u8()
-            if dtype == TERMINATOR:
+            if dtype == SNABType.TERMINATOR:
                 return result
 
             key = self._cstring()
@@ -50,34 +53,39 @@ class Reader:
         result = []
         while True:
             dtype = self._u8()
-            if dtype == TERMINATOR:
+            if dtype == SNABType.TERMINATOR:
                 return result
             result.append(self._read_value(dtype, depth + 1))
 
     def _read_value(self, dtype, depth):
-        if dtype == STRING:
-            return self._cstring()
-        if dtype == WSTRING:
-            return self._wstring()
-        if dtype == REAL:
-            return self._unpack("d")
-        if dtype == INT64:
-            return self._unpack("q")
-        if dtype == FALSE:
-            return False
-        if dtype == TRUE:
-            return True
-        if dtype == NULL:
-            return None
-        if dtype == UNDEFINED:
-            return None
-        if dtype == BUFFER:
-            size = self._unpack("I")
-            return self._bytes(size)
-        if dtype == STRUCT:
-            return self._read_struct(depth)
-        if dtype == ARRAY:
-            return self._read_array(depth)
+        match dtype:
+            case SNABType.STRING:
+                return self._cstring()
+            case SNABType.WSTRING:
+                return self._wstring()
+            case SNABType.REAL:
+                return self._unpack("d")
+            case SNABType.INT64:
+                return self._unpack("q")
+            case SNABType.FALSE:
+                return False
+            case SNABType.TRUE:
+                return True
+            case SNABType.NULL | SNABType.UNDEFINED:
+                return None
+            case SNABType.BUFFER:
+                size = self._unpack("I")
+                return self._bytes(size)
+            case SNABType.GUID:
+                match self.endian:
+                    case "<":
+                        return uuid.UUID(bytes_le=self._bytes(16))
+                    case ">":
+                        return uuid.UUID(bytes=self._bytes(16))
+            case SNABType.STRUCT:
+                return self._read_struct(depth)
+            case SNABType.ARRAY:
+                return self._read_array(depth)
 
         codec = GLOBAL_REGISTRY.decoder(dtype)
         if codec:
@@ -93,7 +101,7 @@ class Reader:
         return val
 
     def _bytes(self, n):
-        b = self.data[self.offset:self.offset+n]
+        b = self.data[self.offset : self.offset + n]
         self.offset += n
         return b
 
@@ -104,7 +112,7 @@ class Reader:
 
     def _cstring(self):
         end = self.data.index(0, self.offset)
-        s = self.data[self.offset:end].decode("utf-8")
+        s = self.data[self.offset : end].decode("utf-8")
         self.offset = end + 1
         return s
 

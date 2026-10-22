@@ -1,23 +1,22 @@
-import struct
-
 # Core datatype indicators
-TERMINATOR = 0x00
-STRUCT     = 0x01
-ARRAY      = 0x02
-STRING     = 0x03
-WSTRING    = 0x04
-REAL       = 0x05
-INT64      = 0x06
-FALSE      = 0x07
-TRUE       = 0x08
-UNDEFINED  = 0x09
-NULL       = 0x0A
-BUFFER     = 0x0B
-
-CORE_TYPES = {
-    TERMINATOR, STRUCT, ARRAY, STRING, WSTRING,
-    REAL, INT64, FALSE, TRUE, UNDEFINED, NULL, BUFFER
-}
+class SNABType():
+    TERMINATOR = 0x00
+    STRUCT     = 0x01
+    ARRAY      = 0x02
+    STRING     = 0x03
+    WSTRING    = 0x04
+    REAL       = 0x05
+    INT64      = 0x06
+    FALSE      = 0x07
+    TRUE       = 0x08
+    UNDEFINED  = 0x09
+    NULL       = 0x0A
+    BUFFER     = 0x0B
+    GUID       = 0x0C
+    CORE_TYPES = {
+        TERMINATOR, STRUCT, ARRAY, STRING, WSTRING,
+        REAL, INT64, FALSE, TRUE, UNDEFINED, NULL, BUFFER, GUID
+    }
 
 HEADER_SIZE = 16
 LANGUAGE_ID = b"PY\x00\x00"

@@ -1,4 +1,4 @@
-import struct
+import struct, uuid
 import pytest
 
 from SNAB import SNABRead, SNABWrite
@@ -10,6 +10,7 @@ def test_simple_struct_roundtrip():
         "size": 24.0,
         "valid": True,
         "nothing": None,
+        "guid": uuid.uuid4()
     }
 
     data = SNABWrite(obj, compress=False)
@@ -19,7 +20,7 @@ def test_simple_struct_roundtrip():
 
 
 def test_array_root():
-    obj = [1, 2, 3, "hello", False, None]
+    obj = [1, 2, 3, "hello", False, None, uuid.uuid4()]
 
     data = SNABWrite(obj)
     result = SNABRead(data)
